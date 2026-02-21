@@ -145,6 +145,7 @@ form.addEventListener("submit", async (e) => {
     const lat = pos.coords.latitude;
     const lng = pos.coords.longitude;
     const accuracy = pos.coords.accuracy; // meters
+    console.log("Accuracy (meters):", accuracy);
 
     const dist = distanceMeters(lat, lng, GEOFENCE_CENTER_LAT, GEOFENCE_CENTER_LNG);
 
@@ -175,7 +176,18 @@ form.addEventListener("submit", async (e) => {
       }
     };
 
-    out.textContent = JSON.stringify(payload, null, 2);
+   out.textContent = JSON.stringify({
+    fullName,
+    phone,
+    email,
+    debug: {
+      deviceLat: lat,
+      deviceLng: lng,
+      accuracyMeters: accuracy,
+      distanceMeters: dist,
+      allowedRadiusMeters: GEOFENCE_RADIUS_METERS
+    }
+  }, null, 2);
 
     // Later you can POST payload to Make here if you want.
   } catch (err) {
