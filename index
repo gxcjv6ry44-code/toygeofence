@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Geofence Toy Form</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:#f6f7f9; margin:0; padding:20px; }
+    .card { max-width:720px; margin:0 auto; background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:18px; box-shadow:0 8px 24px rgba(0,0,0,.06); }
+    h1 { font-size:18px; margin:0 0 8px; }
+    .hint { font-size:12px; color:#6b7280; margin:6px 0 0; line-height:1.35; }
+    label { display:block; font-size:13px; font-weight:700; margin:12px 0 6px; color:#111827; }
+    input { width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:12px; font-size:15px; box-sizing:border-box; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; align-items:center; }
+    button { padding:11px 14px; border-radius:12px; border:0; font-weight:800; cursor:pointer; font-size:15px; }
+    .primary { background:#2563eb; color:#fff; }
+    .secondary { background:#e5e7eb; color:#111827; }
+    .status { margin-top:12px; font-size:13px; }
+    .ok { color:#065f46; }
+    .err { color:#991b1b; }
+    pre { margin-top:12px; padding:12px; background:#0b1020; color:#e5e7eb; border-radius:12px; overflow:auto; font-size:12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Geofence Toy Form</h1>
+    <div class="hint">
+      On Submit, this page requests your location and blocks submission if you are outside the geofence radius.
+      Edit the center/radius in the CONFIG section.
+    </div>
+
+    <form id="toyForm" novalidate>
+      <label for="fullName">Full Name *</label>
+      <input id="fullName" name="fullName" autocomplete="name" />
+
+      <label for="phone">Phone *</label>
+      <input id="phone" name="phone" autocomplete="tel" inputmode="tel" placeholder="801-555-1234" />
+
+      <label for="email">Email *</label>
+      <input id="email" name="email" type="email" autocomplete="email" placeholder="you@example.com" />
+
+      <div class="row">
+        <button id="submitBtn" class="primary" type="submit">Submit</button>
+        <button id="resetBtn" class="secondary" type="button">Reset</button>
+      </div>
+
+      <div id="status" class="status"></div>
+      <pre id="out">{}</pre>
+    </form>
+  </div>
+
+<script>
+/** =========================
+ * CONFIG — EDIT THESE
+ * ========================= */
+// Put your neighborhood test point here:
+const GEOFENCE_CENTER_LAT = 41.000000;   // <- change
+const GEOFENCE_CENTER_LNG = -112.000000; // <- change
+const GEOFENCE_RADIUS_METERS = 200;      // <- change (e.g., 50, 100, 200, 500)
+
+// Geolocation options:
+const GEO_OPTS = {
+  enableHighAccuracy: true,
+  timeout: 12000,
+  maximumAge: 0
+};
+
+/** =========================
+ * Helpers
+ * ========================= */
+function setStatus(msg, cls="") {
+  const s = document.getElementById("status");
+  s.textContent = msg || "";
+  s.className = `status ${cls}`;
+}
+
+function normalizePhone(raw) {
+  const digits = (raw || "").replace(/\D/g, "");
+  if (digits.length === 10) return digits;
+  if (digits.length === 11 && digits.startsWith("1")) return digits.slice(1);
+  return null;
+}
+
+// Haversine distance (meters)
+function distanceMeters(lat1, lon1, lat2, lon2) {
+  const toRad = (x) => (x * Math.PI) / 180;
+  const R = 6371000; // Earth radius in meters
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+function getPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocation is not supported on this device/browser."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, reject, GEO_OPTS);
+  });
+}
+
+/** =========================
+ * Main
+ * ========================= */
+const form = document.getElementById("toyForm");
+const out = document.getElementById("out");
+const submitBtn = document.getElementById("submitBtn");
+
+document.getElementById("resetBtn").addEventListener("click", () => {
+  form.reset();
+  setStatus("");
+  out.textContent = "{}";
+});
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setStatus("");
+
+  const fullName = document.getElementById("fullName").value.trim();
+  const phoneRaw = document.getElementById("phone").value.trim();
+  const email = document.getElementById("email").value.trim().toLowerCase();
+
+  let ok = true;
+  if (!fullName) { setStatus("Name is required.", "err"); ok = false; }
+  const phone = normalizePhone(phoneRaw);
+  if (!phone) { setStatus("Enter a valid US phone number (10 digits).", "err"); ok = false; }
+  if (!email) { setStatus("Email is required.", "err"); ok = false; }
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setStatus("Enter a valid email address.", "err"); ok = false; }
+  if (!ok) return;
+
+  // lock button during geo check
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Checking location…";
+
+  try {
+    setStatus("Requesting location permission…");
+
+    const pos = await getPosition();
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+    const accuracy = pos.coords.accuracy; // meters
+
+    const dist = distanceMeters(lat, lng, GEOFENCE_CENTER_LAT, GEOFENCE_CENTER_LNG);
+
+    // Hard block
+    if (dist > GEOFENCE_RADIUS_METERS) {
+      setStatus(
+        `Outside geofence — blocked. Distance ${Math.round(dist)}m (allowed ${GEOFENCE_RADIUS_METERS}m).`,
+        "err"
+      );
+      out.textContent = JSON.stringify({ fullName, phone, email, location: { lat, lng, accuracy, distMeters: dist } }, null, 2);
+      return;
+    }
+
+    // Success
+    setStatus(
+      `✅ Inside geofence. Distance ${Math.round(dist)}m (accuracy ±${Math.round(accuracy)}m).`,
+      "ok"
+    );
+
+    const payload = {
+      fullName,
+      phone,
+      email,
+      geofence: {
+        center: { lat: GEOFENCE_CENTER_LAT, lng: GEOFENCE_CENTER_LNG, radiusMeters: GEOFENCE_RADIUS_METERS },
+        device: { lat, lng, accuracyMeters: accuracy },
+        distanceMeters: dist
+      }
+    };
+
+    out.textContent = JSON.stringify(payload, null, 2);
+
+    // Later you can POST payload to Make here if you want.
+  } catch (err) {
+    // Common geolocation errors: PERMISSION_DENIED, POSITION_UNAVAILABLE, TIMEOUT
+    setStatus(`Location check failed: ${err.message || err}`, "err");
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Submit";
+  }
+});
+</script>
+</body>
+</html>
