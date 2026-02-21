@@ -54,8 +54,8 @@
  * CONFIG — EDIT THESE
  * ========================= */
 // Put your neighborhood test point here:
-const GEOFENCE_CENTER_LAT = 41.000000;   // <- change
-const GEOFENCE_CENTER_LNG = -112.000000; // <- change
+const GEOFENCE_CENTER_LAT = 41.30141;   // <- change
+const GEOFENCE_CENTER_LNG = -112.07506; // <- change
 const GEOFENCE_RADIUS_METERS = 200;      // <- change (e.g., 50, 100, 200, 500)
 
 // Geolocation options:
